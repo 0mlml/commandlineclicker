@@ -45,6 +45,7 @@ int recall_handler(const Command *cmd);
 int opt_handler(const Command *cmd);
 int save_handler(const Command *cmd);
 int load_handler(const Command *cmd);
+int move_handler(const Command *cmd);
 int click_handler(const Command *cmd);
 int click_down_handler(const Command *cmd);
 int click_up_handler(const Command *cmd);

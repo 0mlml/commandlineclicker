@@ -1,7 +1,7 @@
 #include "main.h"
 
 OptionDefinition option_definitions[] = {
-    {"leader", "CLICKER;", "The leader that will printed when waiting for a command"},
+    {"leader", "\0", "The leader that will printed when waiting for a command"},
     {"enable_hotkey", "true", "Enable hotkeys"}};
 
 #define OPTCOUNT (sizeof(option_definitions) / sizeof(option_definitions[0]))
@@ -14,7 +14,8 @@ CommandDefinition command_definitions[] = {
     {"!", "OPT [opt: word] [value: string] - Sets or prints an option", opt_handler},
     {">", "SAVE [filename: string] - Saves the current script options to a file. Defaults to .clickerrc", save_handler},
     {"<", "LOAD <filename: string> - Loads a script from a file", load_handler},
-    {"M", "MOVE <x: int> <y: int> - Moves the mouse to the specified coordinates", move_handler} {"C", "CLICK <button: int> - Clicks the button specified", click_handler},
+    {"M", "MOVE <x: int> <y: int> - Moves the mouse to the specified coordinates", move_handler},
+    {"C", "CLICK <button: int> - Clicks the button specified", click_handler},
     {"}", "CLICK_DOWN <button: int> - Clicks the button specified", click_down_handler},
     {"{", "CLICK_UP <button: int> - Clicks the button specified", click_up_handler},
     {"K", "KEY <key: char> - Presses the key specified", key_handler},
@@ -456,7 +457,7 @@ int load_handler(const Command *cmd)
   return 0;
 }
 
-int move_handler(const COmmand *cmd)
+int move_handler(const Command *cmd)
 {
   if (cmd->argc != 3)
   {
