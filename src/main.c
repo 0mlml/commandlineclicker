@@ -1,4 +1,5 @@
 #include "main.h"
+#include <handleapi.h>
 
 OptionDefinition option_definitions[] = {
     {"quiet", "false", "Whether the program will print feedback after command"},
@@ -36,6 +37,8 @@ CommandDefinition command_definitions[] = {
     {"&", "HOTKEY <register: char> <command: string> - Sets a hotkey to a command", hotkey_handler},
     {"@", "RECORD <register: char> <command: string> - Records a command to a register", record_handler},
     {"#", "RECALL <register: char> [register: char] ... - Recalls a command from all register(s) listed, in order", recall_handler},
+    {"=", "RECALLIF <register: char> <value: string> <register: char> [register: char] ... - Recalls a command from all register(s) listed, in order, if the value of the register is equal to the value specified", recallif_handler},
+    {"*", "REPEAT <times: int> <register: char> [register: char] ... - Launches a new thread for every register listed to repeat the defined times.", repeat_handler},
     {"!", "OPT [opt: word] [value: string] - Sets or prints an option", opt_handler},
     {">", "SAVE [filename: string] - Saves the current script options to a file. Defaults to .clickerrc", save_handler},
     {"<", "LOAD <filename: string> - Loads a script from a file", load_handler},
@@ -50,6 +53,38 @@ CommandDefinition command_definitions[] = {
     {"W", "DELAY <ms: int> - Waits for the specified amount of milliseconds", delay_handler},
     {"Q", "QUIT - Quits the program", quit_handler},
 };
+
+void trim(char *str)
+{
+  if (str == NULL)
+  {
+    return;
+  }
+
+  int len = strlen(str);
+  int start = 0;
+  int end = len - 1;
+
+  while (isspace(str[start]))
+  {
+    start++;
+  }
+
+  while (end >= start && isspace(str[end]))
+  {
+    str[end] = '\0';
+    end--;
+  }
+
+  if (start > 0)
+  {
+    for (int i = 0; i <= end - start; i++)
+    {
+      str[i] = str[start + i];
+    }
+    str[end - start + 1] = '\0';
+  }
+}
 
 void quiet_printf(char *format, ...)
 {
@@ -214,10 +249,11 @@ int hotkey_handler(const Command *cmd)
     strcat(command, " ");
   }
 
+  trim(command);
   hotkeys[hotkey_index].register_name = hotkey_name;
   hotkeys[hotkey_index].command = command;
 
-  quiet_printf("Hotkey '%c' set to command: %s", hotkey_name, command);
+  quiet_printf("Hotkey '%c' set to command: %s\n", hotkey_name, command);
   return 0;
 }
 
@@ -271,6 +307,7 @@ int record_handler(const Command *cmd)
     strcat(command, " ");
   }
 
+  trim(command);
   registers[register_index].register_name = register_name;
   registers[register_index].command = command;
 
@@ -310,6 +347,146 @@ int recall_handler(const Command *cmd)
     }
   }
 
+  return 0;
+}
+
+int recallif_handler(const Command *cmd)
+{
+  if (cmd->argc < 4)
+  {
+    quiet_printf("Invalid number of arguments for the RECALLIF command.\n");
+    return -1;
+  }
+
+  char cond_register_name = cmd->args[1][0];
+  int cond_register_index = get_register_index(cond_register_name);
+  if (cond_register_index < 0)
+  {
+    quiet_printf("Invalid register name for the RECALLIF command.\n");
+    return -1;
+  }
+
+  if (registers[cond_register_index].command == NULL)
+  {
+    quiet_printf("No value found in register '%c'\n", cond_register_name);
+    return -1;
+  }
+
+  if (strcmp(registers[cond_register_index].command, cmd->args[2]) == 0)
+  {
+
+    for (int i = 3; i < cmd->argc; ++i)
+    {
+      char register_name = cmd->args[i][0];
+      int register_index = get_register_index(register_name);
+      if (register_index < 0)
+      {
+        quiet_printf("Invalid register name for the RECALL command.\n");
+        return -1;
+      }
+
+      if (registers[register_index].command == NULL)
+      {
+        quiet_printf("No command found in register '%c'\n", register_name);
+        return -1;
+      }
+
+      quiet_printf("Recalling command in register '%c': %s\n", register_name, registers[register_index].command);
+      Command saved_cmd;
+      if (parse_command(registers[register_index].command, &saved_cmd) == 0)
+      {
+        execute_command(&saved_cmd);
+      }
+    }
+  }
+
+  return 0;
+}
+
+typedef struct
+{
+  char *command;
+  int times;
+} RepeatCommand;
+
+#ifdef _WIN32
+DWORD WINAPI repeat_thread(LPVOID arg)
+#elif defined(__linux__)
+void *repeat_thread(void *arg)
+#endif
+{
+  RepeatCommand *r_cmd = (RepeatCommand *)arg;
+  Command saved_cmd;
+  if (parse_command(r_cmd->command, &saved_cmd) != 0)
+  {
+    free(r_cmd->command);
+    free(r_cmd);
+    return -1;
+  }
+  for (int i = 0; i < r_cmd->times; ++i)
+  {
+    execute_command(&saved_cmd);
+  }
+  free(r_cmd->command);
+  free(r_cmd);
+  return 0;
+}
+
+int repeat_handler(const Command *cmd)
+{
+  if (cmd->argc < 3)
+  {
+    quiet_printf("Invalid number of arguments for the REPEAT command.\n");
+    return -1;
+  }
+
+  int times = atoi(cmd->args[1]);
+  if (times <= 0)
+  {
+    quiet_printf("Invalid number of times for the REPEAT command.\n");
+    return -1;
+  }
+
+  for (int i = 2; i < cmd->argc; ++i)
+  {
+    RepeatCommand *repeatCommand = (RepeatCommand *)malloc(sizeof(RepeatCommand));
+
+    char register_name = cmd->args[i][0];
+    int register_index = get_register_index(register_name);
+    if (register_index < 0)
+    {
+      quiet_printf("Invalid register name for the REPEAT command.\n");
+      return -1;
+    }
+
+    if (registers[register_index].command == NULL)
+    {
+      quiet_printf("No command found in register '%c'\n", register_name);
+      return -1;
+    }
+
+#ifdef _WIN32
+    HANDLE hotkey_thread;
+    hotkey_thread = CreateThread(NULL, 0, repeat_thread, repeatCommand, 0, NULL);
+    if (hotkey_thread == NULL)
+    {
+      fprintf(stderr, "Error creating thread\n");
+      return 1;
+    }
+    CloseHandle(hotkey_thread);
+#elif defined(__linux__)
+    init_linux();
+
+    pthread_t thread;
+    int err = pthread_create(&thread, NULL, repeat_thread, repeatCommand);
+    if (err != 0)
+    {
+      fprintf(stderr, "Error creating thread\n");
+      return 1;
+    }
+    pthread_detach(thread);
+#endif
+  }
   return 0;
 }
 
@@ -479,6 +656,12 @@ int click_handler(const Command *cmd)
   if (cmd->argc != 2)
   {
     quiet_printf("Invalid number of arguments for the CLICK command.\n");
+
+    for (int i = 0; i < cmd->argc; ++i)
+    {
+      quiet_printf("cmd->args[%d] = %s\n", i, cmd->args[i]);
+    }
+
     return -1;
   }
 
@@ -636,7 +819,23 @@ void detect_keypresses()
       Sleep(100);
       continue;
     }
-    for (char key = ' '; key <= '~'; key++)
+    for (char key = 'a'; key <= 'z'; key++)
+    {
+      if (GetAsyncKeyState(key) & 0x8000 || GetAsyncKeyState(key - ('a' - 'A')) & 0x8000)
+      {
+        int hotkey_index = get_hotkey_index(key);
+        if (hotkey_index != -1 && hotkeys[hotkey_index].command != NULL)
+        {
+          Command saved_cmd;
+          if (parse_command(hotkeys[hotkey_index].command, &saved_cmd) == 0)
+          {
+            execute_command(&saved_cmd);
+          }
+        }
+      }
+    }
+
+    for (char key = ' '; key <= '/'; key++)
     {
       if (GetAsyncKeyState(key) & 0x8000)
       {
@@ -651,6 +850,7 @@ void detect_keypresses()
         }
       }
     }
+
     Sleep(50);
   }
 #elif defined(__linux__)

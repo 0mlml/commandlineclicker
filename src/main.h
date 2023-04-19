@@ -42,6 +42,8 @@ int help_handler(const Command *cmd);
 int hotkey_handler(const Command *cmd);
 int record_handler(const Command *cmd);
 int recall_handler(const Command *cmd);
+int recallif_handler(const Command *cmd);
+int repeat_handler(const Command *cmd);
 int opt_handler(const Command *cmd);
 int save_handler(const Command *cmd);
 int load_handler(const Command *cmd);

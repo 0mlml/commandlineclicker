@@ -21,6 +21,7 @@ The following command definitions are available:
 | &       | HOTKEY \<register: char> \<command: string>  | Sets a hotkey to a command. Whenever the user types the specified character, the command will be executed |
 | @       | RECORD \<register: char> \<command: string> | Records a command to a register. Whenever the user types the specified character, the recorded command will be executed |
 | #       | RECALL \<register: char> [register: char] ... | Recalls a command from all specified registers, in the order they were listed |
+| =       | RECALLIF \<register: char> \<value: string> \<register: char> [register: char] ...| Recalls a command from all register(s) listed, in order, if the value of the register is equal to the value specified |
 | !       | OPT [opt: word] [value: string] | Sets or prints the value of the specified option |
 | >       | SAVE [filename: string] | Saves the current script options to a file. If no filename is specified, the default filename ".clickerrc" will be used |
 | <       | LOAD \<filename: string> | Loads a script from a file |
