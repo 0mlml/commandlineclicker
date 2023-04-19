@@ -14,7 +14,7 @@ CommandDefinition command_definitions[] = {
     {"!", "OPT [opt: word] [value: string] - Sets or prints an option", opt_handler},
     {">", "SAVE [filename: string] - Saves the current script options to a file. Defaults to .clickerrc", save_handler},
     {"<", "LOAD <filename: string> - Loads a script from a file", load_handler},
-    {"C", "CLICK <button: int> - Clicks the button specified", click_handler},
+    {"M", "MOVE <x: int> <y: int> - Moves the mouse to the specified coordinates", move_handler} {"C", "CLICK <button: int> - Clicks the button specified", click_handler},
     {"}", "CLICK_DOWN <button: int> - Clicks the button specified", click_down_handler},
     {"{", "CLICK_UP <button: int> - Clicks the button specified", click_up_handler},
     {"K", "KEY <key: char> - Presses the key specified", key_handler},
@@ -452,6 +452,22 @@ int load_handler(const Command *cmd)
   }
 
   execute_file(filename);
+
+  return 0;
+}
+
+int move_handler(const COmmand *cmd)
+{
+  if (cmd->argc != 3)
+  {
+    printf("Invalid number of arguments for the MOVE command.\n");
+    return -1;
+  }
+
+  int x = atoi(cmd->args[1]);
+  int y = atoi(cmd->args[2]);
+
+  mouseMove(x, y);
 
   return 0;
 }

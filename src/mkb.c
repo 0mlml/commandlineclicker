@@ -1,6 +1,20 @@
 #include "mkb.h"
 #ifdef _WIN32
 
+void mouseMove(int x, int y)
+{
+  INPUT input;
+  input.type = INPUT_MOUSE;
+  input.mi.dx = x;
+  input.mi.dy = y;
+  input.mi.dwFlags = MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE;
+  input.mi.mouseData = 0;
+  input.mi.dwExtraInfo = 0;
+  input.mi.time = 0;
+
+  SendInput(1, &input, sizeof(INPUT));
+}
+
 void mouseDown(int button)
 {
   INPUT input;
@@ -74,6 +88,12 @@ void cleanup_linux()
 {
   XCloseDisplay(display);
   XUngrabKeyboard(display, CurrentTime);
+}
+
+void mouseMove(int x, int y)
+{
+  XTestFakeMotionEvent(display, -1, x, y, CurrentTime);
+  XFlush(display);
 }
 
 void mouseDown(int button)
