@@ -1,10 +1,35 @@
 #include "main.h"
 
 OptionDefinition option_definitions[] = {
+    {"quiet", "false", "Whether the program will print feedback after command"},
     {"leader", "\0", "The leader that will printed when waiting for a command"},
     {"enable_hotkey", "true", "Enable hotkeys"}};
 
 #define OPTCOUNT (sizeof(option_definitions) / sizeof(option_definitions[0]))
+
+Option options[OPTCOUNT];
+
+void init_options()
+{
+  for (int i = 0; i < OPTCOUNT; ++i)
+  {
+    Option option = {strdup(option_definitions[i].key), strdup(option_definitions[i].default_value)};
+    options[i] = option;
+  }
+}
+
+void get_option_value(char *key, char **value)
+{
+  for (int i = 0; i < OPTCOUNT; ++i)
+  {
+    if (strcmp(options[i].key, key) == 0)
+    {
+      *value = strdup(options[i].value);
+      return;
+    }
+  }
+  *value = strdup("Option not found");
+}
 
 CommandDefinition command_definitions[] = {
     {"?", "HELP - Shows helptext", help_handler},
@@ -25,6 +50,20 @@ CommandDefinition command_definitions[] = {
     {"W", "DELAY <ms: int> - Waits for the specified amount of milliseconds", delay_handler},
     {"Q", "QUIT - Quits the program", quit_handler},
 };
+
+void quiet_printf(char *format, ...)
+{
+  char *quiet;
+  get_option_value("quiet", &quiet);
+  if (strcmp(quiet, "true") == 0)
+  {
+    return;
+  }
+  va_list args;
+  va_start(args, format);
+  vprintf(format, args);
+  va_end(args);
+}
 
 char *next_token(char **str_ptr, const char *delim)
 {
@@ -120,14 +159,7 @@ void execute_command(Command *cmd)
   CommandHandler handler = find_handler(cmd->command);
   if (handler != NULL)
   {
-    if (handler(cmd) == 0)
-    {
-      // printf("Command executed successfully.\n");
-    }
-    else
-    {
-      // printf("Error executing command.\n");
-    }
+    handler(cmd);
   }
 }
 
@@ -141,7 +173,7 @@ int help_handler(const Command *cmd)
 }
 
 #define HOTKEYCOUNT 95
-Register hotkeys[HOTKEYCOUNT]; // Update the size to accommodate all printable ASCII characters
+Register hotkeys[HOTKEYCOUNT];
 
 int get_hotkey_index(char hotkey_name)
 {
@@ -149,14 +181,14 @@ int get_hotkey_index(char hotkey_name)
   {
     return hotkey_name - ' ';
   }
-  return -1; // Return -1 if the character is not in the printable ASCII range
+  return -1;
 }
 
 int hotkey_handler(const Command *cmd)
 {
   if (cmd->argc < 3)
   {
-    printf("Invalid number of arguments for the HOTKEY command.\n");
+    quiet_printf("Invalid number of arguments for the HOTKEY command.\n");
     return -1;
   }
 
@@ -164,7 +196,7 @@ int hotkey_handler(const Command *cmd)
   int hotkey_index = get_hotkey_index(hotkey_name);
   if (hotkey_index < 0)
   {
-    printf("Invalid hotkey name for the HOTKEY command.\n");
+    quiet_printf("Invalid hotkey name for the HOTKEY command.\n");
     return -1;
   }
 
@@ -185,7 +217,7 @@ int hotkey_handler(const Command *cmd)
   hotkeys[hotkey_index].register_name = hotkey_name;
   hotkeys[hotkey_index].command = command;
 
-  printf("Hotkey '%c' set to command: %s", hotkey_name, command);
+  quiet_printf("Hotkey '%c' set to command: %s", hotkey_name, command);
   return 0;
 }
 
@@ -213,7 +245,7 @@ int record_handler(const Command *cmd)
 {
   if (cmd->argc < 3)
   {
-    printf("Invalid number of arguments for the RECORD command.\n");
+    quiet_printf("Invalid number of arguments for the RECORD command.\n");
     return -1;
   }
 
@@ -221,7 +253,7 @@ int record_handler(const Command *cmd)
   int register_index = get_register_index(register_name);
   if (register_index < 0)
   {
-    printf("Invalid register name for the RECORD command.\n");
+    quiet_printf("Invalid register name for the RECORD command.\n");
     return -1;
   }
 
@@ -242,7 +274,7 @@ int record_handler(const Command *cmd)
   registers[register_index].register_name = register_name;
   registers[register_index].command = command;
 
-  printf("Recorded command in register '%c': %s\n", register_name, command);
+  quiet_printf("Recorded command in register '%c': %s\n", register_name, command);
   return 0;
 }
 
@@ -250,7 +282,7 @@ int recall_handler(const Command *cmd)
 {
   if (cmd->argc < 2)
   {
-    printf("Invalid number of arguments for the RECALL command.\n");
+    quiet_printf("Invalid number of arguments for the RECALL command.\n");
     return -1;
   }
 
@@ -260,19 +292,17 @@ int recall_handler(const Command *cmd)
     int register_index = get_register_index(register_name);
     if (register_index < 0)
     {
-      printf("Invalid register name for the RECALL command.\n");
+      quiet_printf("Invalid register name for the RECALL command.\n");
       return -1;
     }
 
-    // Check if there is a command saved in the specified register
     if (registers[register_index].command == NULL)
     {
-      printf("No command found in register '%c'\n", register_name);
+      quiet_printf("No command found in register '%c'\n", register_name);
       return -1;
     }
 
-    // Execute the saved command
-    printf("Recalling command in register '%c': %s\n", register_name, registers[register_index].command);
+    quiet_printf("Recalling command in register '%c': %s\n", register_name, registers[register_index].command);
     Command saved_cmd;
     if (parse_command(registers[register_index].command, &saved_cmd) == 0)
     {
@@ -283,40 +313,11 @@ int recall_handler(const Command *cmd)
   return 0;
 }
 
-Option options[OPTCOUNT];
-
-void init_options()
-{
-  for (int i = 0; i < OPTCOUNT; ++i)
-  {
-    Option option = {strdup(option_definitions[i].key), strdup(option_definitions[i].default_value)};
-    options[i] = option;
-  }
-}
-
-void get_option_value(char *key, char **value)
-{
-  for (int i = 0; i < OPTCOUNT; ++i)
-  {
-    if (strcmp(options[i].key, key) == 0)
-    {
-      *value = strdup(options[i].value);
-      return;
-    }
-  }
-  *value = strdup("Option not found");
-}
-
 int opt_handler(const Command *cmd)
 {
   if (cmd->argc > 3)
   {
-    printf("Invalid number of arguments for the OPT command.\n");
-    // print out args?
-    for (int i = 0; i < cmd->argc; ++i)
-    {
-      printf("[%s]", cmd->args[i]);
-    }
+    quiet_printf("Invalid number of arguments for the OPT command.\n");
     return -1;
   }
 
@@ -333,7 +334,7 @@ int opt_handler(const Command *cmd)
     get_option_value(cmd->args[1], &value);
     if (strcmp(value, "Option not found") == 0)
     {
-      printf("Option %s not found\n", cmd->args[1]);
+      quiet_printf("Option %s not found\n", cmd->args[1]);
       return -1;
     }
     printf("%s = %s\n", cmd->args[1], value);
@@ -347,11 +348,11 @@ int opt_handler(const Command *cmd)
       {
         free(options[i].value);
         options[i].value = strdup(cmd->args[2]);
-        printf("Option %s set to %s\n", cmd->args[1], cmd->args[2]);
+        quiet_printf("Option %s set to %s\n", cmd->args[1], cmd->args[2]);
         return 0;
       }
     }
-    printf("Option %s not found\n", cmd->args[1]);
+    quiet_printf("Option %s not found\n", cmd->args[1]);
   }
 
   return 0;
@@ -361,7 +362,7 @@ int save_handler(const Command *cmd)
 {
   if (cmd->argc > 3)
   {
-    printf("Invalid number of arguments for the SAVE command.\n");
+    quiet_printf("Invalid number of arguments for the SAVE command.\n");
     return -1;
   }
 
@@ -379,7 +380,7 @@ int save_handler(const Command *cmd)
   FILE *fp = fopen(filename, "wb");
   if (fp == NULL)
   {
-    printf("Failed to open file %s\n", filename);
+    quiet_printf("Failed to open file %s\n", filename);
     return -1;
   }
 
@@ -415,7 +416,7 @@ void execute_file(char *filename)
 
   if (fp == NULL)
   {
-    printf("Failed to open file %s\n", filename);
+    quiet_printf("Failed to open file %s\n", filename);
     return;
   }
 
@@ -437,7 +438,7 @@ int load_handler(const Command *cmd)
 {
   if (cmd->argc > 3)
   {
-    printf("Invalid number of arguments for the LOAD command.\n");
+    quiet_printf("Invalid number of arguments for the LOAD command.\n");
     return -1;
   }
 
@@ -461,7 +462,7 @@ int move_handler(const Command *cmd)
 {
   if (cmd->argc != 3)
   {
-    printf("Invalid number of arguments for the MOVE command.\n");
+    quiet_printf("Invalid number of arguments for the MOVE command.\n");
     return -1;
   }
 
@@ -477,14 +478,14 @@ int click_handler(const Command *cmd)
 {
   if (cmd->argc != 2)
   {
-    printf("Invalid number of arguments for the CLICK command.\n");
+    quiet_printf("Invalid number of arguments for the CLICK command.\n");
     return -1;
   }
 
   int button = atoi(cmd->args[1]);
   if (button != 0 && button != 1 && button != 2)
   {
-    printf("Invalid button number for the CLICK command.\n");
+    quiet_printf("Invalid button number for the CLICK command.\n");
     return -1;
   }
 
@@ -497,14 +498,14 @@ int click_down_handler(const Command *cmd)
 {
   if (cmd->argc != 2)
   {
-    printf("Invalid number of arguments for the CLICK_DOWN command.\n");
+    quiet_printf("Invalid number of arguments for the CLICK_DOWN command.\n");
     return -1;
   }
 
   int button = atoi(cmd->args[1]);
   if (button != 0 && button != 1 && button != 2)
   {
-    printf("Invalid button number for the CLICK_DOWN command.\n");
+    quiet_printf("Invalid button number for the CLICK_DOWN command.\n");
     return -1;
   }
 
@@ -516,14 +517,14 @@ int click_up_handler(const Command *cmd)
 {
   if (cmd->argc != 2)
   {
-    printf("Invalid number of arguments for the CLICK_UP command.\n");
+    quiet_printf("Invalid number of arguments for the CLICK_UP command.\n");
     return -1;
   }
 
   int button = atoi(cmd->args[1]);
   if (button != 0 && button != 1 && button != 2)
   {
-    printf("Invalid button number for the CLICK_UP command.\n");
+    quiet_printf("Invalid button number for the CLICK_UP command.\n");
     return -1;
   }
 
@@ -535,7 +536,7 @@ int key_handler(const Command *cmd)
 {
   if (cmd->argc != 2)
   {
-    printf("Invalid number of arguments for the KEY command.\n");
+    quiet_printf("Invalid number of arguments for the KEY command.\n");
     return -1;
   }
 
@@ -548,7 +549,7 @@ int key_down_handler(const Command *cmd)
 {
   if (cmd->argc != 2)
   {
-    printf("Invalid number of arguments for the KEY_DOWN command.\n");
+    quiet_printf("Invalid number of arguments for the KEY_DOWN command.\n");
     return -1;
   }
 
@@ -560,7 +561,7 @@ int key_up_handler(const Command *cmd)
 {
   if (cmd->argc != 2)
   {
-    printf("Invalid number of arguments for the KEY_UP command.\n");
+    quiet_printf("Invalid number of arguments for the KEY_UP command.\n");
     return -1;
   }
 
@@ -572,7 +573,7 @@ int sequence_handler(const Command *cmd)
 {
   if (cmd->argc < 2)
   {
-    printf("Invalid number of arguments for the SEQUENCE command.\n");
+    quiet_printf("Invalid number of arguments for the SEQUENCE command.\n");
     return -1;
   }
 
@@ -596,14 +597,14 @@ int delay_handler(const Command *cmd)
 {
   if (cmd->argc != 2)
   {
-    printf("Invalid number of arguments for the WAIT command.\n");
+    quiet_printf("Invalid number of arguments for the WAIT command.\n");
     return -1;
   }
 
   int ms = atoi(cmd->args[1]);
   if (ms < 0)
   {
-    printf("Invalid number of milliseconds for the WAIT command.\n");
+    quiet_printf("Invalid number of milliseconds for the WAIT command.\n");
     return -1;
   }
 
@@ -615,7 +616,7 @@ int quit_handler(const Command *cmd)
 {
   if (cmd->argc != 1)
   {
-    printf("Invalid number of arguments for the QUIT command.\n");
+    quiet_printf("Invalid number of arguments for the QUIT command.\n");
     return -1;
   }
 
@@ -650,7 +651,7 @@ void detect_keypresses()
         }
       }
     }
-    Sleep(50); // Adjust sleep duration to control polling frequency
+    Sleep(50);
   }
 #elif defined(__linux__)
   XEvent event;
@@ -724,6 +725,12 @@ int main()
 
   init_options();
 
+  // If file named DOTFILE exists, execute it
+  if (access(DOTFILE, F_OK) != -1)
+  {
+    execute_file(DOTFILE);
+  }
+
   char input[256];
   Command cmd = {0};
 
@@ -747,7 +754,7 @@ int main()
     }
     else
     {
-      printf("Invalid command. Parsing failed.\n");
+      quiet_printf("Invalid command. Parsing failed.\n");
     }
     free_command(&cmd);
 

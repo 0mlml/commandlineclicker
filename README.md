@@ -8,7 +8,9 @@ The following option definitions are available:
 | Option Name   | Default Value | Description |
 | ------------- | ------------- | ----------- |
 | leader        | >             | The leader that will be printed when waiting for a command |
-| enable_hotkey | true		   | Whether or not hotkeys are enabled |
+| enable_hotkey | true		    | Whether or not hotkeys are enabled |
+| quiet 	    | false         | Whether the program will print feedback after command |
+
 
 ## Command Definitions
 The following command definitions are available:
