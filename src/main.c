@@ -1,9 +1,9 @@
 #include "main.h"
 
 OptionDefinition option_definitions[] = {
-    {"quiet", "false", "Whether the program will print feedback after command"},
-    {"leader", "\0", "The leader that will printed when waiting for a command"},
-    {"enable_hotkey", "true", "Enable hotkeys"}};
+  {"quiet", "false", "Whether the program will print feedback after command"},
+  {"leader", "\0", "The leader that will printed when waiting for a command"},
+  {"enable_hotkey", "true", "Enable hotkeys"}};
 
 #define OPTCOUNT (sizeof(option_definitions) / sizeof(option_definitions[0]))
 
@@ -32,23 +32,23 @@ void get_option_value(char *key, char **value)
 }
 
 CommandDefinition command_definitions[] = {
-    {"?", "HELP - Shows helptext", help_handler},
-    {"&", "HOTKEY <register: char> <command: string> - Sets a hotkey to a command", hotkey_handler},
-    {"@", "RECORD <register: char> <command: string> - Records a command to a register", record_handler},
-    {"#", "RECALL <register: char> [register: char] ... - Recalls a command from all register(s) listed, in order", recall_handler},
-    {"!", "OPT [opt: word] [value: string] - Sets or prints an option", opt_handler},
-    {">", "SAVE [filename: string] - Saves the current script options to a file. Defaults to .clickerrc", save_handler},
-    {"<", "LOAD <filename: string> - Loads a script from a file", load_handler},
-    {"M", "MOVE <x: int> <y: int> - Moves the mouse to the specified coordinates", move_handler},
-    {"C", "CLICK <button: int> - Clicks the button specified", click_handler},
-    {"}", "CLICK_DOWN <button: int> - Clicks the button specified", click_down_handler},
-    {"{", "CLICK_UP <button: int> - Clicks the button specified", click_up_handler},
-    {"K", "KEY <key: char> - Presses the key specified", key_handler},
-    {"]", "KEY_DOWN <key: char> - Presses the key specified", key_down_handler},
-    {"[", "KEY_UP <key: char> - Presses the key specified", key_up_handler},
-    {"S", "SEQUENCE <keys: string> [keys: string] ... - Presses the specified keys in sequence", sequence_handler},
-    {"W", "DELAY <ms: int> - Waits for the specified amount of milliseconds", delay_handler},
-    {"Q", "QUIT - Quits the program", quit_handler},
+  {"?", "HELP - Shows helptext", help_handler},
+  {"&", "HOTKEY <register: char> <command: string> - Sets a hotkey to a command", hotkey_handler},
+  {"@", "RECORD <register: char> <command: string> - Records a command to a register", record_handler},
+  {"#", "RECALL <register: char> [register: char] ... - Recalls a command from all register(s) listed, in order", recall_handler},
+  {"!", "OPT [opt: word] [value: string] - Sets or prints an option", opt_handler},
+  {">", "SAVE [filename: string] - Saves the current script options to a file. Defaults to .clickerrc", save_handler},
+  {"<", "LOAD <filename: string> - Loads a script from a file", load_handler},
+  {"M", "MOVE <x: int> <y: int> - Moves the mouse to the specified coordinates", move_handler},
+  {"C", "CLICK <button: int> - Clicks the button specified", click_handler},
+  {"}", "CLICK_DOWN <button: int> - Clicks the button specified", click_down_handler},
+  {"{", "CLICK_UP <button: int> - Clicks the button specified", click_up_handler},
+  {"K", "KEY <key: char> - Presses the key specified", key_handler},
+  {"]", "KEY_DOWN <key: char> - Presses the key specified", key_down_handler},
+  {"[", "KEY_UP <key: char> - Presses the key specified", key_up_handler},
+  {"S", "SEQUENCE <keys: string> [keys: string] ... - Presses the specified keys in sequence", sequence_handler},
+  {"W", "DELAY <ms: int> - Waits for the specified amount of milliseconds", delay_handler},
+  {"Q", "QUIT - Quits the program", quit_handler},
 };
 
 void quiet_printf(char *format, ...)
@@ -401,7 +401,7 @@ int save_handler(const Command *cmd)
   {
     if (hotkeys[i].command != NULL)
     {
-      fprintf(fp, "& %s %s\n", hotkeys[i].register_name, hotkeys[i].command);
+      fprintf(fp, "& %c %s\n", hotkeys[i].register_name, hotkeys[i].command);
     }
   }
 
@@ -654,8 +654,12 @@ void detect_keypresses()
     Sleep(50);
   }
 #elif defined(__linux__)
-  XEvent event;
-  XKeyEvent *key_event;
+  XSelectInput(get_display(), get_window(), KeyPressMask);
+
+  XEvent ev;
+  KeySym ks;
+  char buf[32];
+  Status status; 
 
   for (;;)
   {
@@ -666,16 +670,13 @@ void detect_keypresses()
       Sleep(100);
       continue;
     }
-    XNextEvent(display, &event);
-    if (event.type == KeyPress)
-    {
-      key_event = (XKeyEvent *)&event;
-      KeySym keysym = XLookupKeysym(key_event, 0);
-      char buf[2];
-      int len = XLookupString(key_event, buf, sizeof(buf), &keysym, NULL);
-      buf[len] = '\0';
-      if (len > 0)
-      {
+    XNextEvent(get_display(), &ev);
+    if (ev.type == KeyPress) {
+      XKeyPressedEvent *kev = (XKeyPressedEvent *) &ev;
+      printf("here");
+      int len = Xutf8LookupString(get_input_context(), kev, buf, sizeof(buf), &ks, &status);
+      if (len > 0) {
+        printf("here2");
         int hotkey_index = get_hotkey_index(buf[0]);
         if (hotkey_index != -1)
         {
@@ -737,7 +738,7 @@ int main()
   char *leader;
   get_option_value("leader", &leader);
 
-  printf(leader);
+  printf("%s", leader);
 
   while (fgets(input, sizeof(input), stdin) != NULL)
   {
@@ -759,7 +760,7 @@ int main()
     free_command(&cmd);
 
     get_option_value("leader", &leader);
-    printf(leader);
+    printf("%s", leader);
   }
 
   free(leader);
