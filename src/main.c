@@ -39,7 +39,9 @@ CommandDefinition command_definitions[] = {
     {"#", "RECALL <register: char> [register: char] ... - Executes a command from all register(s) listed, in order", recall_handler},
     {"=", "RECALLIF <register: char> <value: string> <register: char> [register: char] ... - Executes a command from all register(s) listed, in order, if the value of the register is equal to the value specified", recallif_handler},
     {"-", "RECALLIFNOT <register: char> <value: string> <register: char> [register: char] ... - Executes a command from all register(s) listed, in order, if the value of the register is not equal to the value specified", recallifnot_handler},
+    {"/", "RECALLIFELSE <register: char> <value: string> <register_true: char> <register_false: char> -  Recalls a command from the register specified if the value of the register is equal to the value specified. Otherwise, the command from the register_false will be recalled", recallifelse_handler},
     {"*", "REPEAT <times: int> <register: char> [register: char] ... - Launches a new thread for every register listed to repeat the defined times.", repeat_handler},
+    {"^", "WHILE <register: char> <value: string> <register: char> [register: char] ... - Repeats the commands in the register(s) listed, in order, while the value of the register is equal to the value specified", while_handler},
     {"!", "OPT [opt: word] [value: string] - Sets or prints an option", opt_handler},
     {">", "SAVE [filename: string] - Saves the current script options to a file. Defaults to .clickerrc", save_handler},
     {"<", "LOAD <filename: string> - Loads a script from a file", load_handler},
@@ -232,7 +234,7 @@ int hotkey_handler(const Command *cmd)
   int hotkey_index = get_hotkey_index(hotkey_name);
   if (hotkey_index < 0)
   {
-    quiet_printf("Invalid hotkey name for the HOTKEY command.\n");
+    quiet_printf("Invalid hotkey name pfor the HOTKEY command.\n");
     return -1;
   }
 
@@ -455,6 +457,78 @@ int recallifnot_handler(const Command *cmd)
   return 0;
 }
 
+int recallifelse_handler(const Command *cmd)
+{
+  if (cmd->argc != 5)
+  {
+    quiet_printf("Invalid number of arguments for the RECALLIFELSE command.\n");
+    return -1;
+  }
+
+  char cond_register_name = cmd->args[1][0];
+  int cond_register_index = get_register_index(cond_register_name);
+  if (cond_register_index < 0)
+  {
+    quiet_printf("Invalid register name for the RECALLIFELSE command.\n");
+    return -1;
+  }
+
+  if (registers[cond_register_index].command == NULL)
+  {
+    quiet_printf("No value found in register '%c'\n", cond_register_name);
+    return -1;
+  }
+
+  if (strcmp(registers[cond_register_index].command, cmd->args[2]) == 0)
+  {
+    char register_name = cmd->args[3][0];
+    int register_index = get_register_index(register_name);
+    if (register_index < 0)
+    {
+      quiet_printf("Invalid register name for the RECALLIFELSE command.\n");
+      return -1;
+    }
+
+    if (registers[register_index].command == NULL)
+    {
+      quiet_printf("No command found in register '%c'\n", register_name);
+      return -1;
+    }
+
+    quiet_printf("Recalling command in register '%c': %s\n", register_name, registers[register_index].command);
+    Command saved_cmd;
+    if (parse_command(registers[register_index].command, &saved_cmd) == 0)
+    {
+      execute_command(&saved_cmd);
+    }
+  }
+  else
+  {
+    char register_name = cmd->args[4][0];
+    int register_index = get_register_index(register_name);
+    if (register_index < 0)
+    {
+      quiet_printf("Invalid register name for the RECALLIFELSE command.\n");
+      return -1;
+    }
+
+    if (registers[register_index].command == NULL)
+    {
+      quiet_printf("No command found in register '%c'\n", register_name);
+      return -1;
+    }
+
+    quiet_printf("Recalling command in register '%c': %s\n", register_name, registers[register_index].command);
+    Command saved_cmd;
+    if (parse_command(registers[register_index].command, &saved_cmd) == 0)
+    {
+      execute_command(&saved_cmd);
+    }
+  }
+
+  return 0;
+}
+
 typedef struct
 {
   char *command;
@@ -522,19 +596,113 @@ int repeat_handler(const Command *cmd)
     repeatCommand->command = strdup(registers[register_index].command);
 
 #ifdef _WIN32
-    HANDLE hotkey_thread;
-    hotkey_thread = CreateThread(NULL, 0, repeat_thread, repeatCommand, 0, NULL);
-    if (hotkey_thread == NULL)
+    HANDLE new_thread;
+    new_thread = CreateThread(NULL, 0, repeat_thread, repeatCommand, 0, NULL);
+    if (new_thread == NULL)
     {
       fprintf(stderr, "Error creating thread\n");
       return 1;
     }
-    CloseHandle(hotkey_thread);
+    CloseHandle(new_thread);
 #elif defined(__linux__)
     init_linux();
 
     pthread_t thread;
     int err = pthread_create(&thread, NULL, repeat_thread, repeatCommand);
+    if (err != 0)
+    {
+      fprintf(stderr, "Error creating thread\n");
+      return 1;
+    }
+    pthread_detach(thread);
+#endif
+  }
+  return 0;
+}
+
+typedef struct
+{
+  char *command;
+  char reg;
+  char *value;
+} WhileCommand;
+
+#ifdef _WIN32
+DWORD WINAPI while_thread(LPVOID arg)
+#elif defined(__linux__)
+void *while_thread(void *arg)
+#endif
+{
+  WhileCommand *w_cmd = (WhileCommand *)arg;
+  Command saved_cmd;
+  if (parse_command(w_cmd->command, &saved_cmd) != 0)
+  {
+    free(w_cmd->command);
+    free(w_cmd->value);
+    free(w_cmd);
+    return -1;
+  }
+  // quiet_printf("Repeating command until %c == %s: %s\n", w_cmd->reg, w_cmd->value, w_cmd->command);
+  int register_index = get_register_index(w_cmd->reg);
+  for (;;)
+  {
+
+    if (registers[register_index].command == NULL || strcmp(registers[register_index].command, w_cmd->value) != 0)
+    {
+      break;
+    }
+    execute_command(&saved_cmd);
+  }
+  free(w_cmd->command);
+  free(w_cmd->value);
+  free(w_cmd);
+  return 0;
+}
+
+int while_handler(const Command *cmd)
+{
+  if (cmd->argc < 4)
+  {
+    quiet_printf("Invalid number of arguments for the WHILE command.\n");
+    return -1;
+  }
+
+  for (int i = 3; i < cmd->argc; ++i)
+  {
+    WhileCommand *whileCommand = (WhileCommand *)malloc(sizeof(WhileCommand));
+
+    char register_name = cmd->args[i][0];
+    int register_index = get_register_index(register_name);
+    if (register_index < 0)
+    {
+      quiet_printf("Invalid register name for the WHILE command.\n");
+      return -1;
+    }
+
+    if (registers[register_index].command == NULL)
+    {
+      quiet_printf("No command found in register '%c'\n", register_name);
+      return -1;
+    }
+
+    whileCommand->reg = cmd->args[1][0];
+    whileCommand->value = strdup(cmd->args[2]);
+    whileCommand->command = strdup(registers[register_index].command);
+
+#ifdef _WIN32
+    HANDLE new_thread;
+    new_thread = CreateThread(NULL, 0, while_thread, whileCommand, 0, NULL);
+    if (new_thread == NULL)
+    {
+      fprintf(stderr, "Error creating thread\n");
+      return 1;
+    }
+    CloseHandle(new_thread);
+#elif defined(__linux__)
+    init_linux();
+
+    pthread_t thread;
+    int err = pthread_create(&thread, NULL, while_thread, whileCommand);
     if (err != 0)
     {
       fprintf(stderr, "Error creating thread\n");

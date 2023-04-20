@@ -7,7 +7,7 @@ The following option definitions are available:
 
 | Option Name   | Default Value | Description |
 | ------------- | ------------- | ----------- |
-| leader        | >             | The leader that will be printed when waiting for a command |
+| leader        |               | The leader that will be printed when waiting for a command |
 | enable_hotkey | true		    | Whether or not hotkeys are enabled |
 | quiet 	    | false         | Whether the program will print feedback after command |
 
@@ -23,7 +23,9 @@ The following command definitions are available:
 | #       | RECALL \<register: char> [register: char] ... | Recalls a command from all specified registers, in the order they were listed |
 | =       | RECALLIF \<register: char> \<value: string> \<register: char> [register: char] ...| Recalls a command from all register(s) listed, in order, if the value of the register is equal to the value specified |
 | -       | RECALLIFNOT \<register: char> \<value: string> \<register: char> [register: char] ...| Recalls a command from all register(s) listed, in order, if the value of the register is not equal to the value specified |
-| *       | REPEAT <times: int> <register: char> [register: char] ... | Launches a new thread for every register listed to repeat the defined times. |
+| /       | RECALLIFELSE \<register: char> \<value: string> \<register_true: char> \<register_false: char> | Recalls a command from the register specified if the value of the register is equal to the value specified. Otherwise, the command from the register_false will be recalled |
+| *       | REPEAT <times: int> <register: char> [register: char] ... | Launches a new thread for every register listed to repeat the defined times.  |
+| ^       | WHILE \<register: char> \<value: string> \<register: char> [register: char] ... | Repeats the commands in the register(s) listed, in order, while the value of the register is equal to the value specified |
 | !       | OPT [opt: word] [value: string] | Sets or prints the value of the specified option |
 | >       | SAVE [filename: string] | Saves the current script options to a file. If no filename is specified, the default filename ".clickerrc" will be used |
 | <       | LOAD \<filename: string> | Loads a script from a file |
@@ -37,5 +39,98 @@ The following command definitions are available:
 | S       | SEQUENCE \<keys: string> [keys: string] ... | Presses the specified keys in the order they were listed |
 | W       | DELAY \<ms: int> | Waits for the specified amount of time, in milliseconds |
 | Q       | QUIT | Exits the program |
+| . 	  | COMMENT | This symbol will be reserved as a no-op |
 
 Please refer to the source code for more detailed information about the implementation of each option and command.
+
+## Auto-load
+If there is a `.clickerrc` file in the current directory, it will be loaded automatically when the program is started.
+
+Here is an example of one:
+```
+. Set options to preferences
+! quiet true
+! leader >
+! enable_hotkey true
+
+. Panic hotkey
+& q Q
+
+. Load a script
+< clicker
+```
+
+## Examples
+Here are some examples of scripts. The can all be saved to a file and loaded with the `< <filename>` command.:
+```
+. Two-hotkey autoclicker
+! quiet true
+! enable_hotkey true
+
+. Register for clicking the left mouse button
+@ L C 0
+
+. Register for autoclicker state: 0 = off, 1 = on
+@ s 0
+
+. Register for autoclicker loop
+@ a = s 1 L
+
+. Hotkey for toggling the autoclicker on
+@ t @ s 1
+& o = s 0 t
+
+. Hotkey for toggling the autoclicker off
+@ u @ s 0
+& p = s 1 u
+
+& q Q
+
+. Loop to constantly check the state and execute the autoclicker
+@ r 0
+^ r 0 a
+```
+```
+. Toggleable autoclicker
+! quiet true
+! enable_hotkey true
+
+. Register for autoclicker state: 0 = off, 1 = on
+@ s 0
+. Clicker thread
+@ c C 0
+@ n ^ s 1 c
+
+. Register for turning the autoclicker on
+@ T @ s 1
+@ t # T n
+
+. Register for turning the autoclicker off
+@ u @ s 0
+
+. Hotkey for toggling the autoclicker on/off
+& p / s 0 t u
+
+. Quit hotkey
+& q Q
+```
+```
+. Autocomplete
+! quiet true
+! enable_hotkey true
+
+. Hotkeys do not eat input 
+& o S n my way!
+```
+```
+. Fullscreen application closer
+! quiet true
+! enable_hotkey true
+
+. Move command
+@ m M 64800 750
+. Click command
+@ c C 0
+
+& p # m c
+```
