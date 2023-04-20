@@ -36,8 +36,9 @@ CommandDefinition command_definitions[] = {
     {"?", "HELP - Shows helptext", help_handler},
     {"&", "HOTKEY <register: char> <command: string> - Sets a hotkey to a command", hotkey_handler},
     {"@", "RECORD <register: char> <command: string> - Records a command to a register", record_handler},
-    {"#", "RECALL <register: char> [register: char] ... - Recalls a command from all register(s) listed, in order", recall_handler},
-    {"=", "RECALLIF <register: char> <value: string> <register: char> [register: char] ... - Recalls a command from all register(s) listed, in order, if the value of the register is equal to the value specified", recallif_handler},
+    {"#", "RECALL <register: char> [register: char] ... - Executes a command from all register(s) listed, in order", recall_handler},
+    {"=", "RECALLIF <register: char> <value: string> <register: char> [register: char] ... - Executes a command from all register(s) listed, in order, if the value of the register is equal to the value specified", recallif_handler},
+    {"-", "RECALLIFNOT <register: char> <value: string> <register: char> [register: char] ... - Executes a command from all register(s) listed, in order, if the value of the register is not equal to the value specified", recallifnot_handler},
     {"*", "REPEAT <times: int> <register: char> [register: char] ... - Launches a new thread for every register listed to repeat the defined times.", repeat_handler},
     {"!", "OPT [opt: word] [value: string] - Sets or prints an option", opt_handler},
     {">", "SAVE [filename: string] - Saves the current script options to a file. Defaults to .clickerrc", save_handler},
@@ -374,14 +375,65 @@ int recallif_handler(const Command *cmd)
 
   if (strcmp(registers[cond_register_index].command, cmd->args[2]) == 0)
   {
-
     for (int i = 3; i < cmd->argc; ++i)
     {
       char register_name = cmd->args[i][0];
       int register_index = get_register_index(register_name);
       if (register_index < 0)
       {
-        quiet_printf("Invalid register name for the RECALL command.\n");
+        quiet_printf("Invalid register name for the RECALLIF command.\n");
+        return -1;
+      }
+
+      if (registers[register_index].command == NULL)
+      {
+        quiet_printf("No command found in register '%c'\n", register_name);
+        return -1;
+      }
+
+      quiet_printf("Recalling command in register '%c': %s\n", register_name, registers[register_index].command);
+      Command saved_cmd;
+      if (parse_command(registers[register_index].command, &saved_cmd) == 0)
+      {
+        execute_command(&saved_cmd);
+      }
+    }
+  }
+
+  return 0;
+}
+
+int recallifnot_handler(const Command *cmd)
+{
+  if (cmd->argc < 4)
+  {
+    quiet_printf("Invalid number of arguments for the RECALLIFNOT command.\n");
+    return -1;
+  }
+
+  char cond_register_name = cmd->args[1][0];
+  int cond_register_index = get_register_index(cond_register_name);
+  if (cond_register_index < 0)
+  {
+    quiet_printf("Invalid register name for the RECALLIFNOT command.\n");
+    return -1;
+  }
+
+  if (registers[cond_register_index].command == NULL)
+  {
+    quiet_printf("No value found in register '%c'\n", cond_register_name);
+    return -1;
+  }
+
+  if (strcmp(registers[cond_register_index].command, cmd->args[2]) != 0)
+  {
+    for (int i = 3; i < cmd->argc; ++i)
+    {
+      char register_name = cmd->args[i][0];
+      int register_index = get_register_index(register_name);
+      if (register_index < 0)
+      {
+        quiet_printf("Invalid register name for the RECALLIFNOT command.\n");
         return -1;
       }
 
@@ -423,6 +475,7 @@ void *repeat_thread(void *arg)
     free(r_cmd);
     return -1;
   }
+  quiet_printf("Repeating command %d times: %s\n", r_cmd->times, r_cmd->command);
   for (int i = 0; i < r_cmd->times; ++i)
   {
     execute_command(&saved_cmd);
@@ -464,6 +517,9 @@ int repeat_handler(const Command *cmd)
       quiet_printf("No command found in register '%c'\n", register_name);
       return -1;
     }
+
+    repeatCommand->times = times;
+    repeatCommand->command = strdup(registers[register_index].command);
 
 #ifdef _WIN32
     HANDLE hotkey_thread;
@@ -854,8 +910,12 @@ void detect_keypresses()
     Sleep(50);
   }
 #elif defined(__linux__)
-  XEvent event;
-  XKeyEvent *key_event;
+  XSelectInput(get_display(), get_window(), KeyPressMask);
+
+  XEvent ev;
+  KeySym ks;
+  char buf[32];
+  Status status;
 
   for (;;)
   {
@@ -866,14 +926,11 @@ void detect_keypresses()
       Sleep(100);
       continue;
     }
-    XNextEvent(display, &event);
-    if (event.type == KeyPress)
+    XNextEvent(get_display(), &ev);
+    if (ev.type == KeyPress)
     {
-      key_event = (XKeyEvent *)&event;
-      KeySym keysym = XLookupKeysym(key_event, 0);
-      char buf[2];
-      int len = XLookupString(key_event, buf, sizeof(buf), &keysym, NULL);
-      buf[len] = '\0';
+      XKeyPressedEvent *kev = (XKeyPressedEvent *)&ev;
+      int len = Xutf8LookupString(get_input_context(), kev, buf, sizeof(buf), &ks, &status);
       if (len > 0)
       {
         int hotkey_index = get_hotkey_index(buf[0]);
