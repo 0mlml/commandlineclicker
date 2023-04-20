@@ -22,7 +22,7 @@ void mouseDown(int button)
   input.mi.dx = 0;
   input.mi.dy = 0;
   input.mi.dwFlags =
-      (button == 0) ? MOUSEEVENTF_LEFTDOWN : MOUSEEVENTF_RIGHTDOWN;
+    (button == 0) ? MOUSEEVENTF_LEFTDOWN : MOUSEEVENTF_RIGHTDOWN;
   input.mi.mouseData = 0;
   input.mi.dwExtraInfo = 0;
   input.mi.time = 0;
@@ -72,15 +72,70 @@ void keyUp(char key)
 
 #elif defined(__linux__)
 
+Display *display;
+Window root;
+XIM im;
+XIC ic;
+
+Display *get_display() 
+{
+  return display;
+}
+
+Window get_window() 
+{
+  return root;
+}
+
+XIM get_input_method()
+{
+  return im;
+}
+
+XIC get_input_context()
+{
+  return ic;
+}
+
 void init_linux()
 {
+  if (!XInitThreads())
+  {
+    fprintf(stderr, "Failed to initialize Xlib multithreading support.\n");
+    exit(1);
+  }
+
   display = XOpenDisplay(NULL);
   if (display == NULL)
   {
     fprintf(stderr, "Cannot open display\n");
     exit(1);
   }
-  root = DefaultRootWindow(display);
+
+  int screen = DefaultScreen(display);
+  XSetWindowAttributes attrs;
+  attrs.override_redirect = True; // Set override_redirect attribute to True
+  root = XCreateWindow(display, RootWindow(display, screen), 10, 10, 1, 1, 0, CopyFromParent, InputOnly, CopyFromParent, CWOverrideRedirect, &attrs);
+
+  XSelectInput(display, root, KeyPressMask);
+
+  im = XOpenIM(display, NULL, NULL, NULL);
+  if (im == NULL)
+  {
+    fprintf(stderr, "Cannot open input method\n");
+    exit(1);
+  }
+
+  ic = XCreateIC(im, XNInputStyle, XIMPreeditNothing | XIMStatusNothing, XNClientWindow, root, XNFocusWindow, root, NULL);
+  if (ic == NULL)
+  {
+    fprintf(stderr, "Cannot create input context\n");
+    exit(1);
+  }
+
+  XMapWindow(display, root);
+  XFlush(display);
+
   XGrabKeyboard(display, root, true, GrabModeAsync, GrabModeAsync, CurrentTime);
 }
 
@@ -88,6 +143,8 @@ void cleanup_linux()
 {
   XCloseDisplay(display);
   XUngrabKeyboard(display, CurrentTime);
+  XDestroyIC(ic);
+  XCloseIM(im);
 }
 
 void mouseMove(int x, int y)

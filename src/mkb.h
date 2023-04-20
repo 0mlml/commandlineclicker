@@ -6,10 +6,15 @@
 #include <X11/Xlib.h>
 #include <X11/extensions/XTest.h>
 #include <X11/keysym.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 
-Display *display;
-Window root;
+Display *get_display();
+Window get_window();
+XIM get_input_method();
+XIC get_input_context();
 
 void init_linux();
 void cleanup_linux();

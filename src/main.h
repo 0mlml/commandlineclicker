@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <stdarg.h>
 
 #include "mkb.h"
 
@@ -11,13 +12,16 @@
 
 #define THREAD_FUNC_RETURN_TYPE DWORD WINAPI
 #define THREAD_FUNC_ARG_TYPE LPVOID
-#elif define(__linux__)
+#elif defined(__linux__)
 #define HOME getenv("HOME")
 
 #include <pthread.h>
 #include <unistd.h>
+#include <X11/Xlib.h>
+
 #define THREAD_FUNC_RETURN_TYPE void *
 #define THREAD_FUNC_ARG_TYPE void *
+#define Sleep(x) usleep((x))
 #endif
 
 #define DOTFILE ".clickerrc"
