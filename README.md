@@ -73,7 +73,7 @@ Here is an example of one:
 ```
 
 ## Examples
-Here are some examples of scripts. The can all be saved to a file and loaded with the `< <filename>` command.:
+Here are some examples of scripts. They can all be saved to a file and loaded with the `< <filename>` command.:
 ### Separate 'ON'-hotkey and 'OFF'-hotkey autoclicker
 ```
 ! quiet true
