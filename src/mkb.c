@@ -1,8 +1,11 @@
 #include "mkb.h"
 #ifdef _WIN32
 
-void mouseMove(int x, int y)
+void mouseMoveProportional(float x, float y)
 {
+  x *= 65535;
+  y *= 65535;
+
   INPUT input;
   input.type = INPUT_MOUSE;
   input.mi.dx = x;
@@ -15,6 +18,25 @@ void mouseMove(int x, int y)
   SendInput(1, &input, sizeof(INPUT));
 }
 
+void mouseMove(int x, int y)
+{
+  int screenWidth = GetSystemMetrics(SM_CXSCREEN);
+  int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+  int absoluteX = (x * 65535 + screenWidth / 2) / (screenWidth - 1);
+  int absoluteY = (y * 65535 + screenHeight / 2) / (screenHeight - 1);
+
+  INPUT input;
+  input.type = INPUT_MOUSE;
+  input.mi.dx = absoluteX;
+  input.mi.dy = absoluteY;
+  input.mi.mouseData = 0;
+  input.mi.dwFlags = MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE;
+  input.mi.time = 0;
+  input.mi.dwExtraInfo = 0;
+
+  SendInput(1, &input, sizeof(INPUT));
+}
+
 void mouseDown(int button)
 {
   INPUT input;
@@ -22,7 +44,7 @@ void mouseDown(int button)
   input.mi.dx = 0;
   input.mi.dy = 0;
   input.mi.dwFlags =
-    (button == 0) ? MOUSEEVENTF_LEFTDOWN : MOUSEEVENTF_RIGHTDOWN;
+      (button == 0) ? MOUSEEVENTF_LEFTDOWN : MOUSEEVENTF_RIGHTDOWN;
   input.mi.mouseData = 0;
   input.mi.dwExtraInfo = 0;
   input.mi.time = 0;
@@ -70,6 +92,13 @@ void keyUp(char key)
   SendInput(1, &input, sizeof(INPUT));
 }
 
+MousePos getMousePos()
+{
+  POINT p;
+  GetCursorPos(&p);
+  return (MousePos){p.x, p.y};
+}
+
 #elif defined(__linux__)
 
 Display *display;
@@ -77,12 +106,12 @@ Window root;
 XIM im;
 XIC ic;
 
-Display *get_display() 
+Display *get_display()
 {
   return display;
 }
 
-Window get_window() 
+Window get_window()
 {
   return root;
 }
@@ -177,6 +206,14 @@ void keyUp(char key)
   KeyCode keyCode = XKeysymToKeycode(display, key);
   XTestFakeKeyEvent(display, keyCode, False, 0);
   XFlush(display);
+}
+
+MousePos getMousePos()
+{
+  int x, y;
+  Window child;
+  XQueryPointer(display, root, &child, &child, &x, &y, &x, &y, NULL);
+  return (MousePos){x, y};
 }
 
 #endif

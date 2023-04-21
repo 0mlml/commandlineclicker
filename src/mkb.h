@@ -1,8 +1,10 @@
 #ifdef _WIN32
+
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
 #elif defined(__linux__)
+
 #include <X11/Xlib.h>
 #include <X11/extensions/XTest.h>
 #include <X11/keysym.h>
@@ -18,10 +20,20 @@ XIC get_input_context();
 
 void init_linux();
 void cleanup_linux();
+
 #endif
 
 void mouseMove(int x, int y);
+void mouseMoveProportional(float x, float y);
 void mouseDown(int button);
 void mouseUp(int button);
 void keyDown(char key);
 void keyUp(char key);
+
+typedef struct
+{
+  long x;
+  long y;
+} MousePos;
+
+MousePos getMousePos();

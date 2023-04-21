@@ -46,6 +46,7 @@ typedef struct
 int help_handler(const Command *cmd);
 int hotkey_handler(const Command *cmd);
 int record_handler(const Command *cmd);
+int clone_handler(const Command *cmd);
 int recall_handler(const Command *cmd);
 int recallif_handler(const Command *cmd);
 int recallifnot_handler(const Command *cmd);

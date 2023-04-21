@@ -4,6 +4,7 @@ OptionDefinition option_definitions[] = {
     {"quiet", "false", "Whether the program will print feedback after command"},
     {"leader", "\0", "The leader that will printed when waiting for a command"},
     {"enable_cps_register", "false", "Whether the program will store cps into the C register"},
+    {"enable_last_location_register", "false", "Whether the program will put the COMMAND for last location of the mouse in the @L register"},
     {"enable_hotkey", "true", "Enable hotkeys"}};
 
 #define OPTCOUNT (sizeof(option_definitions) / sizeof(option_definitions[0]))
@@ -36,6 +37,7 @@ CommandDefinition command_definitions[] = {
     {"?", "HELP - Shows helptext", help_handler},
     {"&", "HOTKEY <register: char> <command: string> - Sets a hotkey to a command", hotkey_handler},
     {"@", "RECORD <register: char> <command: string> - Records a command to a register", record_handler},
+    {":", "CLONE <register: char> <register: char> - Clones a register to another register", clone_handler},
     {"#", "RECALL <register: char> [register: char] ... - Executes a command from all register(s) listed, in order", recall_handler},
     {"=", "RECALLIF <register: char> <value: string> <register: char> [register: char] ... - Executes a command from all register(s) listed, in order, if the value of the register is equal to the value specified", recallif_handler},
     {"-", "RECALLIFNOT <register: char> <value: string> <register: char> [register: char] ... - Executes a command from all register(s) listed, in order, if the value of the register is not equal to the value specified", recallifnot_handler},
@@ -45,7 +47,7 @@ CommandDefinition command_definitions[] = {
     {"!", "OPT [opt: word] [value: string] - Sets or prints an option", opt_handler},
     {">", "SAVE [filename: string] - Saves the current script options to a file. Defaults to .clickerrc", save_handler},
     {"<", "LOAD <filename: string> - Loads a script from a file", load_handler},
-    {"M", "MOVE <x: int> <y: int> - Moves the mouse to the specified coordinates", move_handler},
+    {"M", "MOVE [x: int] [y: int] - Moves the mouse to the specified coordinates. If nothing is provided, just save the mouse location to the L register if it is enabled", move_handler},
     {"C", "CLICK <button: int> - Clicks the button specified", click_handler},
     {"}", "CLICK_DOWN <button: int> - Clicks the button specified", click_down_handler},
     {"{", "CLICK_UP <button: int> - Clicks the button specified", click_up_handler},
@@ -316,6 +318,34 @@ int record_handler(const Command *cmd)
   registers[register_index].command = command;
 
   quiet_printf("Recorded command in register '%c': %s\n", register_name, command);
+  return 0;
+}
+
+int clone_handler(const Command *cmd)
+{
+  if (cmd->argc != 3)
+  {
+    quiet_printf("Invalid number of arguments for the CLONE command.\n");
+    return -1;
+  }
+
+  int from_register_index = get_register_index(cmd->args[1][0]);
+  int to_register_index = get_register_index(cmd->args[2][0]);
+  if (from_register_index < 0 || to_register_index < 0)
+  {
+    quiet_printf("Invalid register name for the CLONE command.\n");
+    return -1;
+  }
+
+  if (registers[to_register_index].command)
+  {
+    free(registers[to_register_index].command);
+  }
+
+  registers[to_register_index].command = strdup(registers[from_register_index].command);
+
+  quiet_printf("Cloned command from register '%c' to register '%c': %s\n", cmd->args[1][0], cmd->args[2][0], registers[to_register_index].command);
+
   return 0;
 }
 
@@ -665,12 +695,12 @@ void *while_thread(void *arg)
   int register_index = get_register_index(w_cmd->reg);
   for (;;)
   {
-    if (registers[register_index].command == NULL || strcmp(registers[register_index].command, w_cmd->value) != 0)
-    {
-      break;
-    }
     for (int i = 0; i < w_cmd->commandc; ++i)
     {
+      if (registers[register_index].command == NULL || strcmp(registers[register_index].command, w_cmd->value) != 0)
+      {
+        break;
+      }
       execute_command(&saved_cmds[i]);
     }
   }
@@ -890,16 +920,35 @@ int load_handler(const Command *cmd)
 
 int move_handler(const Command *cmd)
 {
-  if (cmd->argc != 3)
+  if (cmd->argc != 3 && cmd->argc != 1)
   {
     quiet_printf("Invalid number of arguments for the MOVE command.\n");
     return -1;
   }
 
-  int x = atoi(cmd->args[1]);
-  int y = atoi(cmd->args[2]);
+  char *enable_last_location_register;
+  get_option_value("enable_last_location_register", &enable_last_location_register);
+  if (strcmp(enable_last_location_register, "true") == 0)
+  {
+    int index = get_register_index('L');
+    if (index != -1)
+    {
+      free(registers[index].command);
+      MousePos pos = getMousePos();
+      char *command = malloc(sizeof(char) * (strlen("M 00000 00000") + 1));
+      sprintf(command, "M %d %d", pos.x, pos.y);
+      registers[index].command = strdup(command);
+      free(command);
+    }
+  }
 
-  mouseMove(x, y);
+  if (cmd->argc == 3)
+  {
+    int x = atoi(cmd->args[1]);
+    int y = atoi(cmd->args[2]);
+
+    mouseMove(x, y);
+  }
 
   return 0;
 }

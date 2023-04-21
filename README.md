@@ -5,12 +5,13 @@ This code is for a command line based clicker, which allows users to record and 
 ## Option Definitions
 The following option definitions are available:
 
-| Option Name         | Default Value | Description |
-| ------------------- | ------------- | ----------- |
-| leader              |               | The leader that will be printed when waiting for a command |
-| enable_hotkey       | true		  | Whether or not hotkeys are enabled |
-| enable_cps_register | false         | Whether the program will put the CPS in the @C register |
-| quiet 	          | false         | Whether the program will print feedback after command |
+| Option Name                   | Default Value | Description |
+| ----------------------------- | ------------- | ----------- |
+| leader                        |               | The leader that will be printed when waiting for a command |
+| enable_hotkey                 | true		    | Whether or not hotkeys are enabled |
+| enable_cps_register           | false         | Whether the program will put the CPS in the @C register |
+| enable_last_location_register | false         | Whether the program will put the COMMAND for last location of the mouse in the @L register |
+| quiet 	                    | false         | Whether the program will print feedback after command |
 
 
 ## Command Definitions
@@ -21,6 +22,7 @@ The following command definitions are available:
 | ?       | HELP - Shows helptext | Shows the list of available commands and their descriptions |
 | &       | HOTKEY \<register: char> \<command: string>  | Sets a hotkey to a command. Whenever the user types the specified character, the command will be executed |
 | @       | RECORD \<register: char> \<command: string> | Records a command to a register. Whenever the user types the specified character, the recorded command will be executed |
+| :       | CLONE \<register: char> \<register: char> | Clones the contents of one register to another |
 | #       | RECALL \<register: char> [register: char] ... | Recalls a command from all specified registers, in the order they were listed |
 | =       | RECALLIF \<register: char> \<value: string> \<register: char> [register: char] ...| Recalls a command from all register(s) listed, in order, if the value of the register is equal to the value specified |
 | -       | RECALLIFNOT \<register: char> \<value: string> \<register: char> [register: char] ...| Recalls a command from all register(s) listed, in order, if the value of the register is not equal to the value specified |
@@ -30,7 +32,7 @@ The following command definitions are available:
 | !       | OPT [opt: word] [value: string] | Sets or prints the value of the specified option |
 | >       | SAVE [filename: string] | Saves the current script options to a file. If no filename is specified, the default filename ".clickerrc" will be used |
 | <       | LOAD \<filename: string> | Loads a script from a file |
-| M		  | MOVE \<x: int> \<y: int> | Moves the mouse to the specified coordinates |
+| M		  | MOVE [x: int] [y: int] | Moves the mouse to the specified coordinates. If nothing is provided, just save the mouse location to the L register if it is enabled |
 | C       | CLICK \<button: int>| Clicks the specified mouse button |
 | }       | CLICK_DOWN \<button: int> | Presses and holds the specified mouse button |
 | {       | CLICK_UP \<button: int>  | Releases the specified mouse button |
@@ -72,34 +74,8 @@ Here is an example of one:
 
 ## Examples
 Here are some examples of scripts. The can all be saved to a file and loaded with the `< <filename>` command.:
+### Separate 'ON'-hotkey and 'OFF'-hotkey autoclicker
 ```
-. Two-hotkey autoclicker
-! quiet true
-! enable_hotkey true
-
-. Register for clicking the left mouse button
-@ c C 0
-
-. Register for autoclicker state: 0 = off, 1 = on
-@ s 0
-
-. Register for autoclicker loop
-@ a = s 1 c
-
-. Hotkey for toggling the autoclicker on
-@ t @ s 1
-& o = s 0 t
-
-. Hotkey for toggling the autoclicker off
-@ u @ s 0
-& p = s 1 u
-
-. Loop to constantly check the state and execute the autoclicker
-@ r 0
-^ r 0 a
-```
-```
-. Two-hotkey autoclicker (Alternative, more optimized and compact)
 ! quiet true
 ! enable_hotkey true
 
@@ -116,9 +92,8 @@ Here are some examples of scripts. The can all be saved to a file and loaded wit
 . Hotkey for toggling the autoclicker off
 & p @ s 0
 ```
-
+### Single 'TOGGLE'-hotkey autoclicker
 ```
-. Toggleable autoclicker
 ! quiet true
 ! enable_hotkey true
 
@@ -141,8 +116,45 @@ Here are some examples of scripts. The can all be saved to a file and loaded wit
 . Exclusive toggle off, as the hotkey may be unresponsive and the autoclicker may accidentally be turned on
 & q @ s 0
 ```
+### Autoclicker with 'SAVE LOCATION'-hotkey and 'TOGGLE'-hotkey w/ 1000ms delay
 ```
-. Toggleable autoclicker with 100ms delay and CPS printer
+! quiet true
+! enable_hotkey true
+! enable_last_location_register true
+
+. Store the mouse location hotkey
+. 'update' cmd register
+@ U M
+. 'pointer' to 'b'
+@ j # b
+. copy to 'b'
+@ p : L b
+& o # U p
+
+. Autoclicker
+. state
+@ s 0
+@ t @ s 1
+@ u @ s 0
+
+. functions
+. 'pointer' to 'B' register. this is because the 'b' and 'B'
+. registers are updated during the while loop, but the while 
+. loop only loads them once
+@ J # B
+@ P : L B
+@ c C 0
+@ D W 1000
+@ n ^ s 1 U P j c J D
+
+@ T # t n
+
+. hotkeys
+& p / s 0 T u
+& q @ s 0
+```
+### Single 'TOGGLE'-hotkey autoclicker w/ 100ms delay & CPS printout
+```
 ! quiet true
 ! enable_hotkey true
 ! enable_cps_register true
@@ -169,23 +181,11 @@ Here are some examples of scripts. The can all be saved to a file and loaded wit
 . Hotkey for toggling the autoclicker on/off
 & p / s 0 t u
 ```
+### Autocomplete for 'on my way!'
 ```
-. Autocomplete
 ! quiet true
 ! enable_hotkey true
 
 . Hotkeys do not eat input 
 & o S n my way!
-```
-```
-. Fullscreen application closer
-! quiet true
-! enable_hotkey true
-
-. Move command
-@ m M 64800 750
-. Click command
-@ c C 0
-
-& p # m c
 ```
