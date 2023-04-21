@@ -5,11 +5,12 @@ This code is for a command line based clicker, which allows users to record and 
 ## Option Definitions
 The following option definitions are available:
 
-| Option Name   | Default Value | Description |
-| ------------- | ------------- | ----------- |
-| leader        |               | The leader that will be printed when waiting for a command |
-| enable_hotkey | true		    | Whether or not hotkeys are enabled |
-| quiet 	    | false         | Whether the program will print feedback after command |
+| Option Name         | Default Value | Description |
+| ------------------- | ------------- | ----------- |
+| leader              |               | The leader that will be printed when waiting for a command |
+| enable_hotkey       | true		  | Whether or not hotkeys are enabled |
+| enable_cps_register | false         | Whether the program will put the CPS in the @C register |
+| quiet 	          | false         | Whether the program will print feedback after command |
 
 
 ## Command Definitions
@@ -38,8 +39,17 @@ The following command definitions are available:
 | [       | KEY_UP \<key: char>  | Releases the specified key |
 | S       | SEQUENCE \<keys: string> [keys: string] ... | Presses the specified keys in the order they were listed |
 | W       | DELAY \<ms: int> | Waits for the specified amount of time, in milliseconds |
+| P 	  | PRINT \<string: string> | Prints the specified string to the console replaces '@<register: char>' with the value of the register unless escaped|
 | Q       | QUIT | Exits the program |
 | . 	  | COMMENT | This symbol will be reserved as a no-op |
+
+### Some notes:
+ - The RECORD command does not necessarily have to assign a command. It can also be used to assign a value to a register. For example, `@ s 0` will set the value of the register `s` to `0`, though this is just treated as a string, as there is no arithmetic operations.
+ - The RECORD and HOTKEY commands have different registers. This means that `@ s 0` and `& s 0` will not conflict with each other.
+ - The size of the RECORD registers is a-z, A-Z, and 0-9. The size of the HOTKEY registers is the entire ASCII range.
+ - Assigning a hotkey to a capital letter will require SHIFT + KEY, while a lowercase letter simply requires KEY.
+ - You cannot chain commands together on one line, but you can assign comands to registers and recall them to a single line.
+ - WHILE, REPEAT, and HOTKEY (detection) run on separate threads. This means that they will not block the main thread, and will not interfere with each other.
 
 Please refer to the source code for more detailed information about the implementation of each option and command.
 
@@ -68,13 +78,13 @@ Here are some examples of scripts. The can all be saved to a file and loaded wit
 ! enable_hotkey true
 
 . Register for clicking the left mouse button
-@ L C 0
+@ c C 0
 
 . Register for autoclicker state: 0 = off, 1 = on
 @ s 0
 
 . Register for autoclicker loop
-@ a = s 1 L
+@ a = s 1 c
 
 . Hotkey for toggling the autoclicker on
 @ t @ s 1
@@ -84,12 +94,29 @@ Here are some examples of scripts. The can all be saved to a file and loaded wit
 @ u @ s 0
 & p = s 1 u
 
-& q Q
-
 . Loop to constantly check the state and execute the autoclicker
 @ r 0
 ^ r 0 a
 ```
+```
+. Two-hotkey autoclicker (Alternative, more optimized and compact)
+! quiet true
+! enable_hotkey true
+
+. Register for autoclicker state: 0 = off, 1 = on
+@ s 0
+. Autoclicker
+@ c C 0
+@ n ^ s 1 c
+
+. Hotkey for toggling the autoclicker on
+@ t @ s 1
+& o # t n 
+
+. Hotkey for toggling the autoclicker off
+& p @ s 0
+```
+
 ```
 . Toggleable autoclicker
 ! quiet true
@@ -111,8 +138,36 @@ Here are some examples of scripts. The can all be saved to a file and loaded wit
 . Hotkey for toggling the autoclicker on/off
 & p / s 0 t u
 
-. Quit hotkey
-& q Q
+. Exclusive toggle off, as the hotkey may be unresponsive and the autoclicker may accidentally be turned on
+& q @ s 0
+```
+```
+. Toggleable autoclicker with 100ms delay and CPS printer
+! quiet true
+! enable_hotkey true
+! enable_cps_register true
+
+. Register for autoclicker state: 0 = off, 1 = on
+@ s 0
+. Clicker thread
+@ c C 0
+@ d W 100
+@ n ^ s 1 d c
+
+. CPS Printer
+@ D W 1500
+@ p P CPS:@C
+@ N ^ s 1 D p
+
+. Register for turning the autoclicker on
+@ T @ s 1
+@ t # T n N
+
+. Register for turning the autoclicker off
+@ u @ s 0
+
+. Hotkey for toggling the autoclicker on/off
+& p / s 0 t u
 ```
 ```
 . Autocomplete

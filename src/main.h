@@ -3,8 +3,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
-
 
 #include "mkb.h"
 
@@ -19,7 +19,6 @@
 #include <X11/Xlib.h>
 #include <pthread.h>
 #include <unistd.h>
-
 
 #define THREAD_FUNC_RETURN_TYPE void *
 #define THREAD_FUNC_ARG_TYPE void *
@@ -65,6 +64,7 @@ int key_down_handler(const Command *cmd);
 int key_up_handler(const Command *cmd);
 int sequence_handler(const Command *cmd);
 int delay_handler(const Command *cmd);
+int print_handler(const Command *cmd);
 int quit_handler(const Command *cmd);
 
 typedef struct

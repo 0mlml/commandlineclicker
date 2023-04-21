@@ -1,9 +1,9 @@
 #include "main.h"
-#include <handleapi.h>
 
 OptionDefinition option_definitions[] = {
     {"quiet", "false", "Whether the program will print feedback after command"},
     {"leader", "\0", "The leader that will printed when waiting for a command"},
+    {"enable_cps_register", "false", "Whether the program will store cps into the C register"},
     {"enable_hotkey", "true", "Enable hotkeys"}};
 
 #define OPTCOUNT (sizeof(option_definitions) / sizeof(option_definitions[0]))
@@ -54,6 +54,7 @@ CommandDefinition command_definitions[] = {
     {"[", "KEY_UP <key: char> - Presses the key specified", key_up_handler},
     {"S", "SEQUENCE <keys: string> [keys: string] ... - Presses the specified keys in sequence", sequence_handler},
     {"W", "DELAY <ms: int> - Waits for the specified amount of milliseconds", delay_handler},
+    {"P", "PRINT <string: string> - Prints the specified string to the console replaces '@<register: char>' with the value of the register unless escaped", print_handler},
     {"Q", "QUIT - Quits the program", quit_handler},
 };
 
@@ -234,7 +235,7 @@ int hotkey_handler(const Command *cmd)
   int hotkey_index = get_hotkey_index(hotkey_name);
   if (hotkey_index < 0)
   {
-    quiet_printf("Invalid hotkey name pfor the HOTKEY command.\n");
+    quiet_printf("Invalid hotkey name for the HOTKEY command.\n");
     return -1;
   }
 
@@ -531,7 +532,8 @@ int recallifelse_handler(const Command *cmd)
 
 typedef struct
 {
-  char *command;
+  char **commands;
+  int commandc;
   int times;
 } RepeatCommand;
 
@@ -542,19 +544,26 @@ void *repeat_thread(void *arg)
 #endif
 {
   RepeatCommand *r_cmd = (RepeatCommand *)arg;
-  Command saved_cmd;
-  if (parse_command(r_cmd->command, &saved_cmd) != 0)
+  Command saved_cmd[r_cmd->commandc];
+  for (int i = 0; i < r_cmd->commandc; ++i)
   {
-    free(r_cmd->command);
-    free(r_cmd);
-    return -1;
+    if (parse_command(r_cmd->commands[i], &saved_cmd[i]) != 0)
+    {
+      quiet_printf("Invalid command in REPEAT command: %s\n", r_cmd->commands[i]);
+      free(r_cmd->commands);
+      free(r_cmd);
+      return -1;
+    }
   }
-  quiet_printf("Repeating command %d times: %s\n", r_cmd->times, r_cmd->command);
+
   for (int i = 0; i < r_cmd->times; ++i)
   {
-    execute_command(&saved_cmd);
+    for (int j = 0; j < r_cmd->commandc; ++j)
+    {
+      execute_command(&saved_cmd[j]);
+    }
   }
-  free(r_cmd->command);
+  free(r_cmd->commands);
   free(r_cmd);
   return 0;
 }
@@ -574,10 +583,13 @@ int repeat_handler(const Command *cmd)
     return -1;
   }
 
-  for (int i = 2; i < cmd->argc; ++i)
-  {
-    RepeatCommand *repeatCommand = (RepeatCommand *)malloc(sizeof(RepeatCommand));
+  RepeatCommand *repeatCommand = (RepeatCommand *)malloc(sizeof(RepeatCommand));
 
+  repeatCommand->commandc = cmd->argc - 2;
+  repeatCommand->commands = (char **)malloc(sizeof(char *) * repeatCommand->commandc);
+
+  for (int i = 2, j = 0; i < cmd->argc; ++i, ++j)
+  {
     char register_name = cmd->args[i][0];
     int register_index = get_register_index(register_name);
     if (register_index < 0)
@@ -593,36 +605,38 @@ int repeat_handler(const Command *cmd)
     }
 
     repeatCommand->times = times;
-    repeatCommand->command = strdup(registers[register_index].command);
+    repeatCommand->commands[j] = strdup(registers[register_index].command);
+  }
 
 #ifdef _WIN32
-    HANDLE new_thread;
-    new_thread = CreateThread(NULL, 0, repeat_thread, repeatCommand, 0, NULL);
-    if (new_thread == NULL)
-    {
-      fprintf(stderr, "Error creating thread\n");
-      return 1;
-    }
-    CloseHandle(new_thread);
-#elif defined(__linux__)
-    init_linux();
-
-    pthread_t thread;
-    int err = pthread_create(&thread, NULL, repeat_thread, repeatCommand);
-    if (err != 0)
-    {
-      fprintf(stderr, "Error creating thread\n");
-      return 1;
-    }
-    pthread_detach(thread);
-#endif
+  HANDLE new_thread;
+  new_thread = CreateThread(NULL, 0, repeat_thread, repeatCommand, 0, NULL);
+  if (new_thread == NULL)
+  {
+    fprintf(stderr, "Error creating thread\n");
+    return 1;
   }
+  CloseHandle(new_thread);
+#elif defined(__linux__)
+  init_linux();
+
+  pthread_t thread;
+  int err = pthread_create(&thread, NULL, repeat_thread, repeatCommand);
+  if (err != 0)
+  {
+    fprintf(stderr, "Error creating thread\n");
+    return 1;
+  }
+  pthread_detach(thread);
+#endif
+
   return 0;
 }
 
 typedef struct
 {
-  char *command;
+  char **commands;
+  int commandc;
   char reg;
   char *value;
 } WhileCommand;
@@ -634,26 +648,33 @@ void *while_thread(void *arg)
 #endif
 {
   WhileCommand *w_cmd = (WhileCommand *)arg;
-  Command saved_cmd;
-  if (parse_command(w_cmd->command, &saved_cmd) != 0)
+  Command *saved_cmds = malloc(sizeof(Command) * w_cmd->commandc);
+  for (int i = 0; i < w_cmd->commandc; ++i)
   {
-    free(w_cmd->command);
-    free(w_cmd->value);
-    free(w_cmd);
-    return -1;
+    if (parse_command(w_cmd->commands[i], &saved_cmds[i]) != 0)
+    {
+      free(saved_cmds);
+      free(w_cmd->commands);
+      free(w_cmd->value);
+      free(w_cmd);
+      return -1;
+    }
   }
-  // quiet_printf("Repeating command until %c == %s: %s\n", w_cmd->reg, w_cmd->value, w_cmd->command);
+
+  free(w_cmd->commands);
   int register_index = get_register_index(w_cmd->reg);
   for (;;)
   {
-
     if (registers[register_index].command == NULL || strcmp(registers[register_index].command, w_cmd->value) != 0)
     {
       break;
     }
-    execute_command(&saved_cmd);
+    for (int i = 0; i < w_cmd->commandc; ++i)
+    {
+      execute_command(&saved_cmds[i]);
+    }
   }
-  free(w_cmd->command);
+  free(saved_cmds);
   free(w_cmd->value);
   free(w_cmd);
   return 0;
@@ -667,50 +688,58 @@ int while_handler(const Command *cmd)
     return -1;
   }
 
-  for (int i = 3; i < cmd->argc; ++i)
-  {
-    WhileCommand *whileCommand = (WhileCommand *)malloc(sizeof(WhileCommand));
+  WhileCommand *whileCommand = (WhileCommand *)malloc(sizeof(WhileCommand));
 
+  whileCommand->commandc = cmd->argc - 3;
+  whileCommand->commands = (char **)malloc(sizeof(char *) * whileCommand->commandc);
+
+  whileCommand->reg = cmd->args[1][0];
+  whileCommand->value = strdup(cmd->args[2]);
+
+  for (int i = 3, j = 0; i < cmd->argc; ++i, ++j)
+  {
     char register_name = cmd->args[i][0];
     int register_index = get_register_index(register_name);
     if (register_index < 0)
     {
       quiet_printf("Invalid register name for the WHILE command.\n");
+      free(whileCommand->commands);
+      free(whileCommand);
       return -1;
     }
 
     if (registers[register_index].command == NULL)
     {
       quiet_printf("No command found in register '%c'\n", register_name);
+      free(whileCommand->commands);
+      free(whileCommand);
       return -1;
     }
 
-    whileCommand->reg = cmd->args[1][0];
-    whileCommand->value = strdup(cmd->args[2]);
-    whileCommand->command = strdup(registers[register_index].command);
+    whileCommand->commands[j] = strdup(registers[register_index].command);
+  }
 
 #ifdef _WIN32
-    HANDLE new_thread;
-    new_thread = CreateThread(NULL, 0, while_thread, whileCommand, 0, NULL);
-    if (new_thread == NULL)
-    {
-      fprintf(stderr, "Error creating thread\n");
-      return 1;
-    }
-    CloseHandle(new_thread);
-#elif defined(__linux__)
-    init_linux();
-
-    pthread_t thread;
-    int err = pthread_create(&thread, NULL, while_thread, whileCommand);
-    if (err != 0)
-    {
-      fprintf(stderr, "Error creating thread\n");
-      return 1;
-    }
-    pthread_detach(thread);
-#endif
+  HANDLE new_thread;
+  new_thread = CreateThread(NULL, 0, while_thread, whileCommand, 0, NULL);
+  if (new_thread == NULL)
+  {
+    fprintf(stderr, "Error creating thread\n");
+    return 1;
   }
+  CloseHandle(new_thread);
+#elif defined(__linux__)
+  init_linux();
+
+  pthread_t thread;
+  int err = pthread_create(&thread, NULL, while_thread, whileCommand);
+  if (err != 0)
+  {
+    fprintf(stderr, "Error creating thread\n");
+    return 1;
+  }
+  pthread_detach(thread);
+#endif
   return 0;
 }
 
@@ -875,6 +904,36 @@ int move_handler(const Command *cmd)
   return 0;
 }
 
+int clicks_last_second = 0;
+int clicks_tally = 0;
+
+#ifdef _WIN32
+DWORD WINAPI click_tally_thread(LPVOID arg)
+#elif defined(__linux__)
+void *click_tally_thread(void *arg)
+#endif
+{
+  for (;;)
+  {
+    clicks_last_second = clicks_tally;
+    clicks_tally = 0;
+    char *enable_cps_register;
+    get_option_value("enable_cps_register", &enable_cps_register);
+    if (strcmp(enable_cps_register, "true") == 0)
+    {
+      int index = get_register_index('C');
+      if (index != -1)
+      {
+        free(registers[index].command);
+        registers[index].command = malloc(4);
+        sprintf(registers[index].command, "%d", clicks_last_second);
+      }
+    }
+    Sleep(1000);
+  }
+  return 0;
+}
+
 int click_handler(const Command *cmd)
 {
   if (cmd->argc != 2)
@@ -898,6 +957,9 @@ int click_handler(const Command *cmd)
 
   mouseDown(button);
   mouseUp(button);
+
+  clicks_tally++;
+
   return 0;
 }
 
@@ -1019,6 +1081,111 @@ int delay_handler(const Command *cmd)
   return 0;
 }
 
+void find_register_references(const char *input, char **output)
+{
+  int i = 0;
+  int j = 0;
+
+  while (input[i] != '\0')
+  {
+    if (input[i] == '@' && isalpha(input[i + 1]))
+    {
+      (*output)[j++] = input[i + 1];
+      i += 2;
+    }
+    else
+    {
+      i++;
+    }
+  }
+  (*output)[j] = '\0';
+}
+
+void replace_register_references(const char *input, char **output, Register *registers)
+{
+  find_register_references(input, output);
+
+  char *temp = (char *)malloc(512);
+  if (temp == NULL)
+  {
+    printf("Memory allocation failed.\n");
+    return;
+  }
+
+  const char *src = input;
+  char *dst = temp;
+
+  while (*src != '\0')
+  {
+    if (*src == '@' && get_register_index(src[1]) != -1)
+    {
+      int index = get_register_index(src[1]);
+
+      if (index == -1)
+      {
+        break;
+      }
+
+      char *value = registers[index].command;
+      if (value == NULL)
+      {
+        break;
+      }
+
+      strcpy(dst, value);
+      dst += strlen(value);
+      src += 2;
+    }
+    else
+    {
+      *dst++ = *src++;
+    }
+  }
+
+  *dst = '\0';
+  strcpy(*output, temp);
+  free(temp);
+}
+
+int print_handler(const Command *cmd)
+{
+  if (cmd->argc != 2)
+  {
+    quiet_printf("Invalid number of arguments for the PRINT command.\n");
+
+    return -1;
+  }
+
+  char *input = malloc(1);
+  input[0] = '\0';
+  for (int i = 1; i < cmd->argc; ++i)
+  {
+    input = realloc(input, strlen(input) + strlen(cmd->args[i]) + 2);
+    strcat(input, cmd->args[i]);
+    strcat(input, " ");
+  }
+
+  trim(input);
+
+  int max_output_size = 512;
+
+  char *output = (char *)malloc(max_output_size * sizeof(char));
+  if (output == NULL)
+  {
+    quiet_printf("Memory allocation failed in PRINT.\n");
+    return 1;
+  }
+
+  replace_register_references(input, &output, registers);
+
+  printf("%s\n", output);
+
+  free(input);
+  free(output);
+
+  return 0;
+}
+
 int quit_handler(const Command *cmd)
 {
   if (cmd->argc != 1)
@@ -1029,6 +1196,93 @@ int quit_handler(const Command *cmd)
 
   exit(0);
   return 0;
+}
+
+char shift_char(char actual_key, short shiftState)
+{
+  if (actual_key >= 'A' && actual_key <= 'Z' && !shiftState)
+  {
+    return actual_key + ('a' - 'A');
+  }
+
+  if (shiftState)
+  {
+    int shifted_ascii;
+    switch (actual_key)
+    {
+    case '1':
+      shifted_ascii = '!';
+      break;
+    case '2':
+      shifted_ascii = '@';
+      break;
+    case '3':
+      shifted_ascii = '#';
+      break;
+    case '4':
+      shifted_ascii = '$';
+      break;
+    case '5':
+      shifted_ascii = '%';
+      break;
+    case '6':
+      shifted_ascii = '^';
+      break;
+    case '7':
+      shifted_ascii = '&';
+      break;
+    case '8':
+      shifted_ascii = '*';
+      break;
+    case '9':
+      shifted_ascii = '(';
+      break;
+    case '0':
+      shifted_ascii = ')';
+      break;
+    case '-':
+      shifted_ascii = '_';
+      break;
+    case '=':
+      shifted_ascii = '+';
+      break;
+    case '[':
+      shifted_ascii = '{';
+      break;
+    case ']':
+      shifted_ascii = '}';
+      break;
+    case '\\':
+      shifted_ascii = '|';
+      break;
+    case ';':
+      shifted_ascii = ':';
+      break;
+    case '\'':
+      shifted_ascii = '"';
+      break;
+    case ',':
+      shifted_ascii = '<';
+      break;
+    case '.':
+      shifted_ascii = '>';
+      break;
+    case '/':
+      shifted_ascii = '?';
+      break;
+    case '`':
+      shifted_ascii = '~';
+      break;
+    default:
+      shifted_ascii = actual_key;
+      break;
+    }
+    return (char)shifted_ascii;
+  }
+  else
+  {
+    return actual_key;
+  }
 }
 
 void detect_keypresses()
@@ -1043,27 +1297,17 @@ void detect_keypresses()
       Sleep(100);
       continue;
     }
-    for (char key = 'a'; key <= 'z'; key++)
-    {
-      if (GetAsyncKeyState(key) & 0x8000 || GetAsyncKeyState(key - ('a' - 'A')) & 0x8000)
-      {
-        int hotkey_index = get_hotkey_index(key);
-        if (hotkey_index != -1 && hotkeys[hotkey_index].command != NULL)
-        {
-          Command saved_cmd;
-          if (parse_command(hotkeys[hotkey_index].command, &saved_cmd) == 0)
-          {
-            execute_command(&saved_cmd);
-          }
-        }
-      }
-    }
 
-    for (char key = ' '; key <= '/'; key++)
+    short shiftState = GetAsyncKeyState(VK_SHIFT) & 0x8000;
+
+    for (char key = ' '; key <= '~'; key++)
     {
-      if (GetAsyncKeyState(key) & 0x8000)
+      short keyState = GetAsyncKeyState(key);
+      if (keyState & 0x8000)
       {
-        int hotkey_index = get_hotkey_index(key);
+        char actual_key = shift_char(key, shiftState);
+
+        int hotkey_index = get_hotkey_index(actual_key);
         if (hotkey_index != -1 && hotkeys[hotkey_index].command != NULL)
         {
           Command saved_cmd;
@@ -1133,24 +1377,38 @@ int main()
   hotkey_thread = CreateThread(NULL, 0, detect_keypresses_thread, NULL, 0, NULL);
   if (hotkey_thread == NULL)
   {
-    fprintf(stderr, "Error creating thread\n");
+    fprintf(stderr, "Error creating hotkey_thread\n");
     return 1;
   }
+  HANDLE cps_thread;
+  cps_thread = CreateThread(NULL, 0, click_tally_thread, NULL, 0, NULL);
+  if (cps_thread == NULL)
+  {
+    fprintf(stderr, "Error creating cps_thread\n");
+    return 1;
+  }
+
 #elif defined(__linux__)
   init_linux();
 
-  pthread_t thread;
-  int err = pthread_create(&thread, NULL, detect_keypresses_thread, registers);
+  pthread_t hotkey_thread;
+  int err = pthread_create(&hotkey_thread, NULL, detect_keypresses_thread, registers);
   if (err != 0)
   {
-    fprintf(stderr, "Error creating thread\n");
+    fprintf(stderr, "Error creating hotkey_thread\n");
+    return 1;
+  }
+  pthread_t cps_thread;
+  err = pthread_create(&cps_thread, NULL, click_tally_thread, NULL);
+  if (err != 0)
+  {
+    fprintf(stderr, "Error creating cps_thread\n");
     return 1;
   }
 #endif
 
   init_options();
 
-  // If file named DOTFILE exists, execute it
   if (access(DOTFILE, F_OK) != -1)
   {
     execute_file(DOTFILE);
