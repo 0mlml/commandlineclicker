@@ -1,9 +1,10 @@
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
-#include <stdarg.h>
 
 #include "mkb.h"
 
@@ -15,9 +16,9 @@
 #elif defined(__linux__)
 #define HOME getenv("HOME")
 
+#include <X11/Xlib.h>
 #include <pthread.h>
 #include <unistd.h>
-#include <X11/Xlib.h>
 
 #define THREAD_FUNC_RETURN_TYPE void *
 #define THREAD_FUNC_ARG_TYPE void *
@@ -46,6 +47,11 @@ int help_handler(const Command *cmd);
 int hotkey_handler(const Command *cmd);
 int record_handler(const Command *cmd);
 int recall_handler(const Command *cmd);
+int recallif_handler(const Command *cmd);
+int recallifnot_handler(const Command *cmd);
+int recallifelse_handler(const Command *cmd);
+int repeat_handler(const Command *cmd);
+int while_handler(const Command *cmd);
 int opt_handler(const Command *cmd);
 int save_handler(const Command *cmd);
 int load_handler(const Command *cmd);
@@ -58,6 +64,7 @@ int key_down_handler(const Command *cmd);
 int key_up_handler(const Command *cmd);
 int sequence_handler(const Command *cmd);
 int delay_handler(const Command *cmd);
+int print_handler(const Command *cmd);
 int quit_handler(const Command *cmd);
 
 typedef struct
